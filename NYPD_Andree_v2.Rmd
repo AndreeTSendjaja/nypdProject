@@ -1,0 +1,558 @@
+---
+title: "NYPD_Andree"
+author: "Andree"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+## Introduction
+
+```{r echo = FALSE}
+library(tidyverse)
+setwd("C:/Users/62812/OneDrive/Desktop/Andree/Colorado/DataScienceasaField/nypdProject")
+nypdData <- read_csv("https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv")
+
+nypdData$STATISTICAL_MURDER_FLAG_TRUE <- ifelse(nypdData$STATISTICAL_MURDER_FLAG == TRUE, 1, 0)
+murder_p = round(100 *sum(nypdData$STATISTICAL_MURDER_FLAG_TRUE) / nrow(nypdData),2)
+murder_class <- c("murder", "not murder")
+murder_proportion <- c(murder_p, 100-murder_p)
+
+pie(murder_proportion, labels = murder_proportion, 
+    main = "Murder Proportion out of Shooting Occurrences %", col = rainbow(length(murder_proportion)))
+legend("topright", c("murder", "not murder"), 
+       cex = 0.5, fill = rainbow(length(murder_proportion)))
+
+```
+
+
+
+
+This document tries to predict if a shooting would result in death - hence counted as a murder - based on information such as: occur time of the day, boro, jurisdiction code, perpetrator's age, perpetrator's race, perpetrator's sex, victim's age, victim's race, victim's sex, victim's age. 
+
+## Source
+
+Raw data for this document is available at <"https://data.cityofnewyork.us/api/views/833y-fsy8/rows.csv"> for download.  
+As described on NYC Open Data <"https://data.cityofnewyork.us/Public-Safety/NYPD-Shooting-Incident-Data-Historic-/833y-fsy8/about_data">, the raw data contains every shooting occurences that happen between 2006 and 2023. 
+
+"This data is manually extracted every quarter and reviewed by the Office of Management Analysis and Planning before being posted on the NYPD website. Each record represents a shooting incident in NYC and includes information about the event, the location and time of occurrence. In addition, information related to suspect and victim demographics is also included." - NYC Open Data
+
+
+## Variables
+
+```{r echo=FALSE}
+nypdData$Boro_Manhattan <- ifelse(nypdData$BORO == "MANHATTAN", 1, 0)
+nypdData$Boro_Bronx <- ifelse(nypdData$BORO == "BRONX", 1, 0)
+nypdData$Boro_Queens <- ifelse(nypdData$BORO == "QUEENS", 1, 0)
+nypdData$Boro_Brooklyn <- ifelse(nypdData$BORO == "BROOKLYN", 1, 0)
+nypdData$Boro_StatenIsland <- ifelse(nypdData$BORO == "STATEN ISLAND", 1, 0)
+
+boro_class <- c("Manhattan", "Bronx", "Queens", "Brooklyn", "Staten Island")
+
+boro_occurrences_proportion <- c( round(sum(nypdData$Boro_Manhattan) * 100 / nrow(nypdData), 2), 
+                                  round(sum(nypdData$Boro_Bronx) * 100/ nrow(nypdData), 2), 
+                                  round(sum(nypdData$Boro_Queens) *100 / nrow(nypdData), 2), 
+                                  round(sum(nypdData$Boro_Brooklyn) *100/ nrow(nypdData), 2), 
+                                  round(sum(nypdData$Boro_StatenIsland)*100/ nrow(nypdData), 2))
+
+pie(boro_occurrences_proportion, labels = boro_occurrences_proportion, 
+    main = "Boro Occurrences %", col = rainbow(length(boro_occurrences_proportion)))
+legend("topright", c("Manhattan", "Bronx", "Queens", "Brooklyn", "Staten Island"), 
+       cex = 0.5, fill = rainbow(length(boro_occurrences_proportion)))
+```
+
+```{r echo=FALSE}
+nypdData$OCCUR_TIME_5to10 <- ifelse(hour(nypdData$OCCUR_TIME) >= 5 & hour(nypdData$OCCUR_TIME) <= 10, 1, 0)
+nypdData$OCCUR_TIME_10to15 <- ifelse(hour(nypdData$OCCUR_TIME) >= 10 & hour(nypdData$OCCUR_TIME) <= 15, 1, 0)
+nypdData$OCCUR_TIME_15to20 <- ifelse(hour(nypdData$OCCUR_TIME) >= 15 & hour(nypdData$OCCUR_TIME) <= 20, 1, 0)
+nypdData$OCCUR_TIME_20to24 <- ifelse(hour(nypdData$OCCUR_TIME) >= 20 & hour(nypdData$OCCUR_TIME) <= 24, 1, 0)
+nypdData$OCCUR_TIME_00to5 <- ifelse(hour(nypdData$OCCUR_TIME) >= 00 & hour(nypdData$OCCUR_TIME) <= 5, 1, 0)
+
+
+OccurTime_Window <- c("5 to 10", "10 to 15", "15 to 20", "20 to 24", "00 to 5")
+
+OccurTime_proportion <- c( round(sum(nypdData$OCCUR_TIME_5to10) * 100 / nrow(nypdData), 2), 
+                              round(sum(nypdData$OCCUR_TIME_10to15) * 100/ nrow(nypdData), 2),
+                              round(sum(nypdData$OCCUR_TIME_15to20) * 100/ nrow(nypdData), 2),
+                              round(sum(nypdData$OCCUR_TIME_20to24) * 100/ nrow(nypdData), 2),
+                              round(sum(nypdData$OCCUR_TIME_00to5) * 100/ nrow(nypdData), 2))
+
+pie(OccurTime_proportion, labels = OccurTime_proportion, 
+    main = "Occur Time %", col = rainbow(length(OccurTime_proportion)))
+legend("topright", c("5 to 10", "10 to 15", "15 to 20", "20 to 24", "00 to 5"), 
+       cex = 0.5, fill = rainbow(length(OccurTime_proportion)))
+
+```
+
+```{r echo=FALSE}
+nypdData$JURISDICTION_CODE_Patrol <- ifelse(is.na(nypdData$JURISDICTION_CODE) == TRUE, 0, ifelse(nypdData$JURISDICTION_CODE == "0", 1, 0))
+nypdData$JURISDICTION_CODE_Transit <- ifelse(is.na(nypdData$JURISDICTION_CODE) == TRUE, 0, ifelse(nypdData$JURISDICTION_CODE == "1", 1, 0))
+nypdData$JURISDICTION_CODE_Housing <- ifelse(is.na(nypdData$JURISDICTION_CODE) == TRUE, 0, ifelse(nypdData$JURISDICTION_CODE == "2", 1, 0))
+nypdData$JURISDICTION_CODE_NA <- ifelse(is.na(nypdData$JURISDICTION_CODE) == TRUE, 1, 0)
+
+
+JurisdictionGrp <- c("Patrol", "Transit", "Housing", "NA")
+
+Jurisdiction_proportion <- c( round(sum(nypdData$JURISDICTION_CODE_Patrol) * 100 / nrow(nypdData), 2), 
+                              round(sum(nypdData$JURISDICTION_CODE_Transit) * 100/ nrow(nypdData), 2),
+                              round(sum(nypdData$JURISDICTION_CODE_Housing) * 100/ nrow(nypdData), 2),
+                              round(sum(nypdData$JURISDICTION_CODE_NA) * 100/ nrow(nypdData), 2))
+
+
+pie(Jurisdiction_proportion, labels = Jurisdiction_proportion, 
+    main = "Jurisdiction %", col = rainbow(length(Jurisdiction_proportion)))
+legend("topright", c("Patrol", "Transit", "Housing", "NA"), 
+       cex = 0.5, fill = rainbow(length(Jurisdiction_proportion)))
+       
+```
+
+```{r echo=FALSE}
+nypdData$VicAgeGrp_2544 <- ifelse(nypdData$VIC_AGE_GROUP == "25-44", 1, 0)
+nypdData$VicAgeGrp_1824 <- ifelse(nypdData$VIC_AGE_GROUP == "18-24", 1, 0)
+nypdData$VicAgeGrp_bel18 <- ifelse(nypdData$VIC_AGE_GROUP == "<18", 1, 0)
+nypdData$VicAgeGrp_ab65 <- ifelse(nypdData$VIC_AGE_GROUP == "65+", 1, 0)
+nypdData$VicAgeGrp_4564 <- ifelse(nypdData$VIC_AGE_GROUP == "45-64", 1, 0)
+nypdData$VicAgeGrp_NA <- ifelse(nypdData$VIC_AGE_GROUP == "UNKNOWN" | nypdData$VIC_AGE_GROUP == "1022", 1, 0)
+
+VicAgeGrp <- c("< 18", "18 to 24", "25 to 44", "45 to 64", " > 65", "NA")
+VicAgeGrp_proportion <- c( round(sum(nypdData$VicAgeGrp_bel18) * 100 / nrow(nypdData), 2), 
+                           round(sum(nypdData$VicAgeGrp_1824) * 100/ nrow(nypdData), 2), 
+                           round(sum(nypdData$VicAgeGrp_2544) *100 / nrow(nypdData), 2), 
+                           round(sum(nypdData$VicAgeGrp_4564) *100/ nrow(nypdData), 2), 
+                           round(sum(nypdData$VicAgeGrp_ab65)*100/ nrow(nypdData), 2),
+                           round(sum(nypdData$VicAgeGrp_NA)*100/ nrow(nypdData), 2))
+
+pie(VicAgeGrp_proportion, labels = VicAgeGrp_proportion, 
+    main = "Victim Age Group %", col = rainbow(length(VicAgeGrp_proportion)))
+legend("topright", c("<18", "18 to 24", "25 to 44", "45 to 64", "> 65", "NA"), 
+       cex = 0.5, fill = rainbow(length(VicAgeGrp_proportion)))
+
+```
+
+```{r echo=FALSE}
+nypdData$VicSex_Male <- ifelse(nypdData$VIC_SEX == "M", 1, 0)
+nypdData$VicSex_NA <- ifelse(nypdData$VIC_SEX == "U", 1, 0)
+nypdData$VicSex_Female <- ifelse(nypdData$VIC_SEX == "F", 1, 0)
+
+VicSexGrp <- c("male", "female", "NA")
+
+VicSexGrp_proportion <- c( round(sum(nypdData$VicSex_Male) * 100 / nrow(nypdData), 2), 
+                           round(sum(nypdData$VicSex_Female) * 100/ nrow(nypdData), 2), 
+                           round(sum(nypdData$VicSex_NA) *100 / nrow(nypdData), 2))
+
+pie(VicSexGrp_proportion, labels = VicSexGrp_proportion, 
+    main = "Victim Sex Group %", col = rainbow(length(VicSexGrp_proportion)))
+legend("topright", c("male", "female", "NA"), 
+       cex = 0.5, fill = rainbow(length(VicSexGrp_proportion)))
+```
+
+
+```{r echo=FALSE}
+nypdData$VicRace_black <- ifelse(nypdData$VIC_RACE == "BLACK", 1, 0)
+nypdData$VicRace_white <- ifelse(nypdData$VIC_RACE == "WHITE", 1, 0)
+nypdData$VicRace_whiteHispanic <- ifelse(nypdData$VIC_RACE == "WHITE HISPANIC", 1, 0)
+nypdData$VicRace_blackHispanic <- ifelse(nypdData$VIC_RACE == "BLACK HISPANIC", 1, 0)
+nypdData$VicRace_asian <- ifelse(nypdData$VIC_RACE == "ASIAN / PACIFIC ISLANDER", 1, 0)
+nypdData$VicRace_AmericanIndian <- ifelse(nypdData$VIC_RACE == "AMERICAN INDIAN/ALASKAN NATIVE", 1, 0)
+
+VicRaceGrp <- c("Black", "White", "White Hispanic", "Black Hispanic", "Asian", "American Indian")
+
+VicRaceGrp_proportion <- c( round(sum(nypdData$VicRace_black) * 100 / nrow(nypdData), 2), 
+                           round(sum(nypdData$VicRace_white) * 100/ nrow(nypdData), 2), 
+                           round(sum(nypdData$VicRace_whiteHispanic) *100 / nrow(nypdData), 2),
+                           round(sum(nypdData$VicRace_blackHispanic) *100 / nrow(nypdData), 2),
+                           round(sum(nypdData$VicRace_asian) *100 / nrow(nypdData), 2),
+                           round(sum(nypdData$VicRace_AmericanIndian) *100 / nrow(nypdData), 2))
+
+pie(VicRaceGrp_proportion, labels = VicRaceGrp_proportion, 
+    main = "Victim Race Group %", col = rainbow(length(VicRaceGrp_proportion)))
+legend("topright", c("Black", "White", "White Hispanic", "Black Hispanic", "Asian", "American Indian"), 
+       cex = 0.5, fill = rainbow(length(VicRaceGrp_proportion)))
+
+```
+
+
+```{r echo=FALSE}
+nypdData$PERP_AGE_GROUP_2544 <- ifelse(nypdData$PERP_AGE_GROUP == "UNKNOWN" | nypdData$PERP_AGE_GROUP == "1022" | nypdData$PERP_AGE_GROUP == "940" | nypdData$PERP_AGE_GROUP == "224" | nypdData$PERP_AGE_GROUP == "1028" | is.na(nypdData$PERP_AGE_GROUP) == TRUE | nypdData$PERP_AGE_GROUP == "(null)", 0, ifelse(nypdData$PERP_AGE_GROUP == "25-44", 1, 0))
+nypdData$PERP_AGE_GROUP_1824 <- ifelse(nypdData$PERP_AGE_GROUP == "UNKNOWN" | nypdData$PERP_AGE_GROUP == "1022" | nypdData$PERP_AGE_GROUP == "940" | nypdData$PERP_AGE_GROUP == "224" | nypdData$PERP_AGE_GROUP == "1028" | is.na(nypdData$PERP_AGE_GROUP) == TRUE | nypdData$PERP_AGE_GROUP == "(null)", 0, ifelse(nypdData$PERP_AGE_GROUP == "18-24", 1, 0))
+nypdData$PERP_AGE_GROUP_ab65 <- ifelse(nypdData$PERP_AGE_GROUP == "UNKNOWN" | nypdData$PERP_AGE_GROUP == "1022" | nypdData$PERP_AGE_GROUP == "940" | nypdData$PERP_AGE_GROUP == "224" | nypdData$PERP_AGE_GROUP == "1028" | is.na(nypdData$PERP_AGE_GROUP) == TRUE | nypdData$PERP_AGE_GROUP == "(null)", 0, ifelse(nypdData$PERP_AGE_GROUP == "65+", 1, 0))
+nypdData$PERP_AGE_GROUP_NA <- ifelse(nypdData$PERP_AGE_GROUP == "UNKNOWN" | nypdData$PERP_AGE_GROUP == "1022" | nypdData$PERP_AGE_GROUP == "940" | nypdData$PERP_AGE_GROUP == "224" | nypdData$PERP_AGE_GROUP == "1028" | is.na(nypdData$PERP_AGE_GROUP) == TRUE | nypdData$PERP_AGE_GROUP == "(null)", 1, 0)
+nypdData$PERP_AGE_GROUP_bel18 <- ifelse(nypdData$PERP_AGE_GROUP == "UNKNOWN" | nypdData$PERP_AGE_GROUP == "1022" | nypdData$PERP_AGE_GROUP == "940" | nypdData$PERP_AGE_GROUP == "224" | nypdData$PERP_AGE_GROUP == "1028" | is.na(nypdData$PERP_AGE_GROUP) == TRUE | nypdData$PERP_AGE_GROUP == "(null)", 0, ifelse(nypdData$PERP_AGE_GROUP == "<18", 1, 0))
+nypdData$PERP_AGE_GROUP_4564 <- ifelse(nypdData$PERP_AGE_GROUP == "UNKNOWN" | nypdData$PERP_AGE_GROUP == "1022" | nypdData$PERP_AGE_GROUP == "940" | nypdData$PERP_AGE_GROUP == "224" | nypdData$PERP_AGE_GROUP == "1028" | is.na(nypdData$PERP_AGE_GROUP) == TRUE | nypdData$PERP_AGE_GROUP == "(null)", 0, ifelse(nypdData$PERP_AGE_GROUP == "45_64", 1, 0))
+
+PERP_AGE_GROUP <- c("< 18", "18 to 24", "25 to 44", "45 to 64", " > 65", "NA")
+PERP_AGE_GROUP_proportion <- c( round(sum(nypdData$PERP_AGE_GROUP_bel18) * 100 / nrow(nypdData), 2), 
+                                round(sum(nypdData$PERP_AGE_GROUP_1824) * 100/ nrow(nypdData), 2), 
+                                round(sum(nypdData$PERP_AGE_GROUP_2544) *100 / nrow(nypdData), 2), 
+                                round(sum(nypdData$PERP_AGE_GROUP_4564) *100/ nrow(nypdData), 2), 
+                                round(sum(nypdData$PERP_AGE_GROUP_ab65)*100/ nrow(nypdData), 2),
+                                round(sum(nypdData$PERP_AGE_GROUP_NA)*100/ nrow(nypdData), 2))
+
+
+
+pie(PERP_AGE_GROUP_proportion, labels = PERP_AGE_GROUP_proportion, 
+    main = "Perpertrator Age Group %", col = rainbow(length(PERP_AGE_GROUP_proportion)))
+legend("topright", c("<18", "18 to 24", "25 to 44", "45 to 64", "> 65", "NA"), 
+       cex = 0.5, fill = rainbow(length(PERP_AGE_GROUP_proportion)))
+
+```
+
+
+```{r echo=FALSE}
+nypdData$PERP_SEX_m <- ifelse(nypdData$PERP_SEX == "U" | nypdData$PERP_SEX == "(null)" | is.na(nypdData$PERP_SEX) == TRUE, 0, ifelse(nypdData$PERP_SEX == "M", 1, 0))
+nypdData$PERP_SEX_NA <- ifelse(nypdData$PERP_SEX == "U" | nypdData$PERP_SEX == "(null)" | is.na(nypdData$PERP_SEX) == TRUE, 1, 0)
+nypdData$PERP_SEX_F <- ifelse(nypdData$PERP_SEX == "U" | nypdData$PERP_SEX == "(null)" | is.na(nypdData$PERP_SEX) == TRUE, 0, ifelse(nypdData$PERP_SEX == "F", 1, 0))
+
+PERP_SEX <- c("male", "female", "NA")
+
+PERP_SEX_proportion <- c( round(sum(nypdData$PERP_SEX_m) * 100 / nrow(nypdData), 2), 
+                          round(sum(nypdData$PERP_SEX_F) * 100/ nrow(nypdData), 2), 
+                          round(sum(nypdData$PERP_SEX_NA) *100 / nrow(nypdData), 2))
+
+pie(PERP_SEX_proportion, labels = PERP_SEX_proportion, 
+    main = "Perpetrator Sex %", col = rainbow(length(PERP_SEX_proportion)))
+legend("topright", c("male", "female", "NA"), 
+       cex = 0.5, fill = rainbow(length(PERP_SEX_proportion)))
+
+```
+
+```{r echo=FALSE}
+nypdData$PerpRace_black <- ifelse(nypdData$PERP_RACE == "UNKNOWN" | nypdData$PERP_SEX == "(null)" | is.na(nypdData$PERP_SEX) == TRUE, 0, ifelse(nypdData$PERP_RACE == "BLACK", 1, 0)) 
+nypdData$PerpRace_white <- ifelse(nypdData$PERP_RACE == "UNKNOWN" | nypdData$PERP_SEX == "(null)" | is.na(nypdData$PERP_SEX) == TRUE, 0, ifelse(nypdData$PERP_RACE == "WHITE", 1, 0)) 
+nypdData$PerpRace_whiteHispanic <- ifelse(nypdData$PERP_RACE == "UNKNOWN" | nypdData$PERP_SEX == "(null)" | is.na(nypdData$PERP_SEX) == TRUE, 0, ifelse(nypdData$PERP_RACE == "WHITE HISPANIC", 1, 0)) 
+nypdData$PerpRace_blackHispanic <- ifelse(nypdData$PERP_RACE == "UNKNOWN" | nypdData$PERP_SEX == "(null)" | is.na(nypdData$PERP_SEX) == TRUE, 0, ifelse(nypdData$PERP_RACE == "BLACK HISPANIC", 1, 0)) 
+nypdData$PerpRace_asian <- ifelse(nypdData$PERP_RACE == "UNKNOWN" | nypdData$PERP_SEX == "(null)" | is.na(nypdData$PERP_SEX) == TRUE, 0, ifelse(nypdData$PERP_RACE == "ASIAN / PACIFIC ISLANDER", 1, 0)) 
+nypdData$PerpRace_AmericanIndian <- ifelse(nypdData$PERP_RACE == "UNKNOWN" | nypdData$PERP_SEX == "(null)" | is.na(nypdData$PERP_SEX) == TRUE, 0, ifelse(nypdData$PERP_RACE == "AMERICAN INDIAN/ALASKAN NATIVE", 1, 0)) 
+nypdData$PerpRace_NA <- ifelse(nypdData$PERP_RACE == "UNKNOWN" | nypdData$PERP_RACE == "(null)" | is.na(nypdData$PERP_RACE) == TRUE, 1, 0)
+
+
+
+PerpRaceGrp <- c("Black", "White", "White Hispanic", "Black Hispanic", "Asian", "American Indian")
+
+PerpRaceGrp_proportion <- c( round(sum(nypdData$PerpRace_black) * 100 / nrow(nypdData), 2), 
+                             round(sum(nypdData$PerpRace_white) * 100/ nrow(nypdData), 2), 
+                             round(sum(nypdData$PerpRace_whiteHispanic) *100 / nrow(nypdData), 2),
+                             round(sum(nypdData$PerpRace_blackHispanic) *100 / nrow(nypdData), 2),
+                             round(sum(nypdData$PerpRace_asian) *100 / nrow(nypdData), 2),
+                             round(sum(nypdData$PerpRace_AmericanIndian) *100 / nrow(nypdData), 2))
+
+sum(nypdData$PerpRace_black)
+
+pie(PerpRaceGrp_proportion, labels = PerpRaceGrp_proportion, 
+    main = "Perpetrator's Race Group %", col = rainbow(length(PerpRaceGrp_proportion)))
+legend("topright", c("Black", "White", "White Hispanic", "Black Hispanic", "Asian", "American Indian"), 
+       cex = 0.5, fill = rainbow(length(PerpRaceGrp_proportion)))
+
+```
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+
+## Model 1
+
+Assuming independence, in theory, we could calculate the joint probability of death in a shooting given the variables above.
+
+### Analysis
+
+Assuming independence between the above predictors, an 11-am shooting in Brooklyn of a 19yo male White Hispanic Victim by a 22yo male White Hispanic perpetrator in a patrol jurisdiction would result in death - hence categorized as murder - by the following probability formula: 
+
+```{r echo=TRUE}
+  (nrow(nypdData %>% filter(nypdData$STATISTICAL_MURDER_FLAG == TRUE & hour(nypdData$OCCUR_TIME) >= 10 & hour(nypdData$OCCUR_TIME) <= 15 )) / sum(nypdData$OCCUR_TIME_10to15) ) *
+  (nrow(nypdData %>% filter(nypdData$STATISTICAL_MURDER_FLAG == TRUE & nypdData$BORO == "BROOKLYN"))/ sum(nypdData$Boro_Brooklyn)) *
+  (nrow(nypdData %>% filter(nypdData$STATISTICAL_MURDER_FLAG == TRUE & nypdData$VIC_SEX == "M" )) /sum(nypdData$VicSex_Male) ) *
+  (nrow(nypdData %>% filter(nypdData$STATISTICAL_MURDER_FLAG == TRUE & nypdData$VIC_RACE == "WHITE HISPANIC"))/ sum(nypdData$VicRace_whiteHispanic)) *
+  (nrow(nypdData %>% filter(nypdData$STATISTICAL_MURDER_FLAG == TRUE & nypdData$VIC_AGE_GROUP == "18-24")) / sum(nypdData$VicAgeGrp_1824) ) *
+  (nrow(nypdData %>% filter(nypdData$STATISTICAL_MURDER_FLAG == TRUE & nypdData$PERP_AGE_GROUP == "18-24")) / sum(nypdData$PERP_AGE_GROUP_1824))*
+  (nrow(nypdData %>% filter(nypdData$STATISTICAL_MURDER_FLAG == TRUE & nypdData$PERP_SEX == "M")) / sum(nypdData$PERP_SEX_m))*
+  (nrow(nypdData %>% filter(nypdData$STATISTICAL_MURDER_FLAG == TRUE & nypdData$PERP_RACE == "WHITE HISPANIC")) / sum(nypdData$PerpRace_whiteHispanic)) *
+  (nrow(nypdData %>% filter(nypdData$STATISTICAL_MURDER_FLAG == TRUE & nypdData$JURISDICTION_CODE == "0")) / sum(nypdData$JURISDICTION_CODE_Patrol)) 
+```
+
+
+### Comparing with Real Data
+
+In reality, an 11-am shooting in Brooklyn of a 19yo male White Hispanic Victim by a 22yo male White Hispanic perpetrator in a patrol jurisdiction occurs 0.01% out of the shooting occurrences.
+
+```{r echo=TRUE}
+
+testcase <- nypdData %>%
+              filter(
+                hour(nypdData$OCCUR_TIME) >= 10 & hour(nypdData$OCCUR_TIME) <= 15 &
+                nypdData$BORO == "BROOKLYN" &
+                nypdData$VIC_SEX == "M" & 
+                nypdData$VIC_AGE_GROUP == "18-24" &
+                nypdData$VIC_RACE == "WHITE HISPANIC" &
+                nypdData$PERP_AGE_GROUP == "18-24" &
+                nypdData$PERP_SEX == "M" &
+                nypdData$PERP_RACE == "WHITE HISPANIC" &
+                nypdData$JURISDICTION_CODE == "0" )
+
+
+nrow(testcase) *100 / nrow(nypdData)
+
+```
+
+The two numbers are very far away from another. 
+
+Let's try another case of, say, a 10-pm shooting in Bronx of a 30yo male Black Victim by a 17yo male Black perpetrator in a housing jurisdiction.
+
+```{r echo=TRUE}
+  (nrow(nypdData %>% filter(nypdData$STATISTICAL_MURDER_FLAG == TRUE & hour(nypdData$OCCUR_TIME) >= 20 & hour(nypdData$OCCUR_TIME) <= 24 )) / sum(nypdData$OCCUR_TIME_20to24) ) *
+  (nrow(nypdData %>% filter(nypdData$STATISTICAL_MURDER_FLAG == TRUE & nypdData$BORO == "BRONX"))/ sum(nypdData$Boro_Bronx)) *
+  (nrow(nypdData %>% filter(nypdData$STATISTICAL_MURDER_FLAG == TRUE & nypdData$VIC_SEX == "M" )) /sum(nypdData$VicSex_Male) ) *
+  (nrow(nypdData %>% filter(nypdData$STATISTICAL_MURDER_FLAG == TRUE & nypdData$VIC_RACE == "BLACK"))/ sum(nypdData$VicRace_black)) *
+  (nrow(nypdData %>% filter(nypdData$STATISTICAL_MURDER_FLAG == TRUE & nypdData$VIC_AGE_GROUP == "25-44")) / sum(nypdData$VicAgeGrp_2544) ) *
+  (nrow(nypdData %>% filter(nypdData$STATISTICAL_MURDER_FLAG == TRUE & nypdData$PERP_AGE_GROUP == "<18")) / sum(nypdData$PERP_AGE_GROUP_bel18))*
+  (nrow(nypdData %>% filter(nypdData$STATISTICAL_MURDER_FLAG == TRUE & nypdData$PERP_SEX == "M")) / sum(nypdData$PERP_SEX_m))*
+  (nrow(nypdData %>% filter(nypdData$STATISTICAL_MURDER_FLAG == TRUE & nypdData$PERP_RACE == "BLACK")) / sum(nypdData$PerpRace_black)) *
+  (nrow(nypdData %>% filter(nypdData$STATISTICAL_MURDER_FLAG == TRUE & nypdData$JURISDICTION_CODE == "2")) / sum(nypdData$JURISDICTION_CODE_Housing)) 
+```
+
+```{r echo=TRUE}
+
+testcase2 <- nypdData %>%
+              filter(
+                hour(nypdData$OCCUR_TIME) >= 20 & hour(nypdData$OCCUR_TIME) <= 24 &
+                nypdData$BORO == "BRONX" &
+                nypdData$VIC_SEX == "M" & 
+                nypdData$VIC_AGE_GROUP == "25-44" &
+                nypdData$VIC_RACE == "BLACK" &
+                nypdData$PERP_AGE_GROUP == "<18" &
+                nypdData$PERP_SEX == "M" &
+                nypdData$PERP_RACE == "BLACK" &
+                nypdData$JURISDICTION_CODE == "2" )
+
+
+nrow(testcase2) *100 / nrow(nypdData)
+
+```
+
+They too are far away from one another..
+
+### Conclusion
+I cannot confidently say that the above joint probability model is accurate. 
+
+
+### Possible Bias
+The model above does not remove nor omit NA values. 
+
+
+## Model 2 - Logistic Regression
+
+A quick googling would tell us that one of the best ways to model discrete outcomes is logistic regression.
+Let's attempt to set one up using the NYPD data.
+
+
+
+Also, while we are at it, let's filter out the NAs
+
+```{r echo=TRUE}
+
+nypdModel <- nypdData %>%
+  filter( VicAgeGrp_NA == 0 & VicSex_NA == 0 & JURISDICTION_CODE_NA == 0  & PERP_AGE_GROUP_NA == 0 & PERP_SEX_NA == 0 & nypdData$PerpRace_NA == 0) %>%
+  select(INCIDENT_KEY, STATISTICAL_MURDER_FLAG_TRUE, 
+         Boro_Bronx, Boro_Manhattan, Boro_Queens, Boro_Brooklyn, Boro_StatenIsland,
+         VicAgeGrp_2544, VicAgeGrp_1824, VicAgeGrp_bel18, VicAgeGrp_ab65, VicAgeGrp_4564,
+         VicSex_Male, VicSex_Female,
+         VicRace_black, VicRace_white, VicRace_whiteHispanic, VicRace_blackHispanic, VicRace_asian, VicRace_AmericanIndian,
+         JURISDICTION_CODE_Transit, JURISDICTION_CODE_Patrol, JURISDICTION_CODE_Housing,
+         OCCUR_TIME_5to10, OCCUR_TIME_10to15, OCCUR_TIME_15to20, OCCUR_TIME_20to24,OCCUR_TIME_00to5,
+         PerpRace_black, PerpRace_white, PerpRace_whiteHispanic, PerpRace_blackHispanic, PerpRace_asian, PerpRace_AmericanIndian,
+         PERP_AGE_GROUP_2544, PERP_AGE_GROUP_1824, PERP_AGE_GROUP_ab65, PERP_AGE_GROUP_bel18, PERP_AGE_GROUP_4564,
+         PERP_SEX_m, PERP_SEX_F)
+
+```
+
+
+To avoid collinearity, we leave out one classification for each predictors; i.e., we would leave: Staten Island for Boro, 00 to 5 for occur time, etc.  
+It is to be noted that the following codes are inspired by the following blog <"https://www.geeksforgeeks.org/filter-data-by-multiple-conditions-in-r-using-dplyr/">
+
+```{r echo=TRUE}
+mod2 <- glm(STATISTICAL_MURDER_FLAG_TRUE ~ Boro_Brooklyn + Boro_Queens + Boro_Bronx + Boro_Manhattan +
+          VicAgeGrp_1824+ VicAgeGrp_2544 + VicAgeGrp_ab65 + VicAgeGrp_bel18 +
+          VicSex_Male +
+          VicRace_black + VicRace_white + VicRace_whiteHispanic + VicRace_blackHispanic + VicRace_asian +
+          JURISDICTION_CODE_Transit + JURISDICTION_CODE_Patrol +
+          OCCUR_TIME_5to10 + OCCUR_TIME_10to15 + OCCUR_TIME_15to20 + OCCUR_TIME_20to24 +
+          PERP_AGE_GROUP_2544 + PERP_AGE_GROUP_1824 + PERP_AGE_GROUP_ab65 + PERP_AGE_GROUP_bel18 +
+          PerpRace_black + PerpRace_white + PerpRace_whiteHispanic + PerpRace_blackHispanic + PerpRace_asian +
+          PERP_SEX_m,
+          family = binomial,
+          data = nypdModel)
+
+summary(mod2)
+
+pred2 = predict(mod2)
+summary(pred2)
+
+```
+
+I have to be honest: I do not yet know how to interpret these summaries. 
+But I suspect, to have a gist on the model's performance, we could compare its predictions and the actual result.
+
+First we could find out the proportion of murder among the shooting occurrences. 
+```{r echo=TRUE}
+
+sum(nypdModel$STATISTICAL_MURDER_FLAG_TRUE)/nrow(nypdModel)
+```
+
+When the NAs have been filtered out, occurrences were classified as murder ~23.93% of the time. 
+
+Let's look at how often the model predicts murder:
+
+```{r echo=TRUE}
+
+sum(pred2)/nrow(nypdModel)
+
+```
+
+The result is a weird_looking negative number. 
+
+
+
+As everything is already set up, let's try to also evaluate the performance of model1 with data that does not contain NAs. 
+
+```{r echo = FALSE}
+Boro_Brooklyn_Proportion = sum(nypdModel$Boro_Brooklyn) / nrow(nypdModel)
+Boro_Queens_Proportion = sum(nypdModel$Boro_Queens) / nrow(nypdModel)
+Boro_Bronx_Proportion = sum(nypdModel$Boro_Bronx) / nrow(nypdModel)
+Boro_Manhattan_Proportion = sum(nypdModel$Boro_Manhattan) / nrow(nypdModel)
+Boro_StatenIsland_Proportion = 1 - (Boro_Manhattan_Proportion + Boro_Bronx_Proportion + Boro_Queens_Proportion + Boro_Brooklyn_Proportion)
+
+VicAgeGrp_1824_Proportion = sum(nypdModel$VicAgeGrp_1824) / nrow(nypdModel)
+VicAgeGrp_2544_Proportion = sum(nypdModel$VicAgeGrp_2544) / nrow(nypdModel)
+VicAgeGrp_ab65_Proportion = sum(nypdModel$VicAgeGrp_ab65) / nrow(nypdModel)
+VicAgeGrp_bel18_Proportion = sum(nypdModel$VicAgeGrp_bel18) / nrow(nypdModel)
+VicAgeGrp_4564_Proportion = 1 - (VicAgeGrp_1824_Proportion + VicAgeGrp_bel18_Proportion + VicAgeGrp_2544_Proportion + VicAgeGrp_ab65_Proportion)
+
+VicMale_Proportion = sum(nypdModel$VicSex_Male) / nrow(nypdModel)
+VicFemale_Proportion = 1- VicMale_Proportion
+
+VicRace_black_Proportion = sum(nypdModel$VicRace_black) / nrow(nypdModel)
+VicRace_white_Proportion = sum(nypdModel$VicRace_white) / nrow(nypdModel)
+VicRace_whiteHispanic_Proportion = sum(nypdModel$VicRace_whiteHispanic) / nrow(nypdModel)
+VicRace_blackHispanic_Proportion = sum(nypdModel$VicRace_blackHispanic) / nrow(nypdModel)
+VicRace_asian_Proportion = sum(nypdModel$VicRace_asian) / nrow(nypdModel)
+VicRace_americanIndian_Proportion = 1 - (VicRace_black_Proportion + VicRace_white_Proportion + VicRace_whiteHispanic_Proportion + VicRace_blackHispanic_Proportion + VicRace_asian_Proportion)
+
+JURISDICTION_CODE_Transit_P = sum(nypdModel$JURISDICTION_CODE_Transit) / nrow(nypdModel)
+JURISDICTION_CODE_Patrol_P = sum(nypdModel$JURISDICTION_CODE_Patrol) / nrow(nypdModel)
+JURISDICTION_CODE_House_P = 1 - JURISDICTION_CODE_Patrol_P - JURISDICTION_CODE_Transit_P
+
+OCCUR_TIME_5to10_P = sum(nypdModel$OCCUR_TIME_5to10)/ nrow(nypdModel)
+OCCUR_TIME_10to15_P = sum(nypdModel$OCCUR_TIME_10to15)/ nrow(nypdModel)
+OCCUR_TIME_15to20_P = sum(nypdModel$OCCUR_TIME_15to20)/ nrow(nypdModel)
+OCCUR_TIME_20to24_P = sum(nypdModel$OCCUR_TIME_20to24)/ nrow(nypdModel)
+OCCUR_TIME_00to5_P = 1 - (OCCUR_TIME_20to24_P + OCCUR_TIME_15to20_P + OCCUR_TIME_10to15_P + OCCUR_TIME_5to10_P )
+
+PERP_AGE_GROUP_1824_Proportion = sum(nypdModel$PERP_AGE_GROUP_1824) / nrow(nypdModel)
+PERP_AGE_GROUP_2544_Proportion = sum(nypdModel$PERP_AGE_GROUP_2544) / nrow(nypdModel)
+PERP_AGE_GROUP_ab65_Proportion = sum(nypdModel$PERP_AGE_GROUP_ab65) / nrow(nypdModel)
+PERP_AGE_GROUP_bel18_Proportion = sum(nypdModel$PERP_AGE_GROUP_bel18) / nrow(nypdModel)
+PERP_AGE_GROUP_4564_Proportion = 1 - (PERP_AGE_GROUP_1824_Proportion + PERP_AGE_GROUP_bel18_Proportion + PERP_AGE_GROUP_2544_Proportion + PERP_AGE_GROUP_ab65_Proportion)
+
+PerpMale_Proportion = sum(nypdModel$PERP_SEX_m) / nrow(nypdModel)
+PerpFemale_Proportion = 1- PerpMale_Proportion
+
+PerpRace_black_Proportion = sum(nypdModel$PerpRace_black) / nrow(nypdModel)
+PerpRace_white_Proportion = sum(nypdModel$PerpRace_white) / nrow(nypdModel)
+PerpRace_whiteHispanic_Proportion = sum(nypdModel$PerpRace_whiteHispanic) / nrow(nypdModel)
+PerpRace_blackHispanic_Proportion = sum(nypdModel$PerpRace_blackHispanic) / nrow(nypdModel)
+PerpRace_asian_Proportion = sum(nypdModel$PerpRace_asian) / nrow(nypdModel)
+PerpRace_americanIndian_Proportion = 1 - (PerpRace_black_Proportion + PerpRace_white_Proportion + PerpRace_whiteHispanic_Proportion + PerpRace_blackHispanic_Proportion + PerpRace_asian_Proportion)
+
+
+```
+
+```{r echo=TRUE}
+
+
+nypdModel$mod1 <- ((nypdModel$Boro_Bronx * Boro_Bronx_Proportion) + 
+                      (nypdModel$Boro_Manhattan * Boro_Manhattan_Proportion) + 
+                      (nypdModel$Boro_Queens * Boro_Queens_Proportion) + 
+                      (nypdModel$Boro_Brooklyn * Boro_Brooklyn_Proportion) + 
+                      (nypdModel$Boro_StatenIsland * Boro_StatenIsland_Proportion)) *
+  
+                    ((nypdModel$VicAgeGrp_1824 * VicAgeGrp_1824_Proportion) + 
+                      (nypdModel$VicAgeGrp_2544 * VicAgeGrp_2544_Proportion) + 
+                      (nypdModel$VicAgeGrp_4564 * VicAgeGrp_4564_Proportion) + 
+                      (nypdModel$VicAgeGrp_ab65 * VicAgeGrp_ab65_Proportion) + 
+                      (nypdModel$VicAgeGrp_bel18 * VicAgeGrp_bel18_Proportion)) *
+  
+                    ((nypdModel$VicSex_Male * VicMale_Proportion) + 
+                      (nypdModel$VicSex_Female * VicFemale_Proportion)) *
+  
+                    ((nypdModel$VicRace_AmericanIndian * VicRace_americanIndian_Proportion) + 
+                       (nypdModel$VicRace_asian * VicRace_asian_Proportion) + 
+                       (nypdModel$VicRace_blackHispanic * VicRace_blackHispanic_Proportion) + 
+                       (nypdModel$VicRace_whiteHispanic * VicRace_whiteHispanic_Proportion) + 
+                       (nypdModel$VicRace_white * VicRace_white_Proportion) + 
+                       (nypdModel$VicRace_black * VicRace_black_Proportion)) *
+  
+                    ((nypdModel$JURISDICTION_CODE_Patrol * JURISDICTION_CODE_Patrol_P) + 
+                       (nypdModel$JURISDICTION_CODE_Housing * JURISDICTION_CODE_House_P) + 
+                       (nypdModel$JURISDICTION_CODE_Transit * JURISDICTION_CODE_Transit_P)) *
+  
+                    ((nypdModel$OCCUR_TIME_00to5 * OCCUR_TIME_00to5_P) + 
+                       (nypdModel$OCCUR_TIME_5to10 * OCCUR_TIME_5to10_P) + 
+                       (nypdModel$OCCUR_TIME_10to15 * OCCUR_TIME_10to15_P) + 
+                       (nypdModel$OCCUR_TIME_15to20 * OCCUR_TIME_15to20_P) + 
+                       (nypdModel$OCCUR_TIME_20to24 * OCCUR_TIME_20to24_P)) *
+  
+                    ((nypdModel$PERP_AGE_GROUP_1824 * PERP_AGE_GROUP_1824_Proportion) + 
+                       (nypdModel$PERP_AGE_GROUP_2544 * PERP_AGE_GROUP_2544_Proportion) + 
+                       (nypdModel$PERP_AGE_GROUP_4564 * PERP_AGE_GROUP_4564_Proportion) + 
+                       (nypdModel$PERP_AGE_GROUP_ab65 * PERP_AGE_GROUP_ab65_Proportion) + 
+                       (nypdModel$PERP_AGE_GROUP_bel18 * PERP_AGE_GROUP_bel18_Proportion)) *
+  
+                    ((nypdModel$PERP_SEX_m * PerpMale_Proportion) + 
+                       (nypdModel$PERP_SEX_F * PerpFemale_Proportion)) *
+  
+                    ((nypdModel$PerpRace_AmericanIndian * PerpRace_americanIndian_Proportion) + 
+                       (nypdModel$PerpRace_asian * PerpRace_asian_Proportion) + 
+                       (nypdModel$PerpRace_blackHispanic * PerpRace_blackHispanic_Proportion) + 
+                       (nypdModel$PerpRace_whiteHispanic * PerpRace_whiteHispanic_Proportion) + 
+                       (nypdModel$PerpRace_white * PerpRace_white_Proportion) + 
+                       (nypdModel$PerpRace_black * PerpRace_black_Proportion))
+  
+
+nypdModel$pred1 <- ifelse(nypdModel$mod1 > 0.5, 1, 0)
+
+sum(nypdModel$pred1)/nrow(nypdModel)
+
+
+```
+
+The result is also a suspicious zero.
+
+Or may be, we should be summing mod1, instead of summing pred1..
+
+```{r echo=TRUE}
+sum(nypdModel$mod1)/nrow(nypdModel)
+
+```
+
+
+
+That is less suspicious. But can I do that?
+Where did I do wrong?
+Let me know what you think.
+
+
+### Conclusion
+The author requires more in-depth understanding of data science to model a project this ambitious.
+
+
+### Possible Bias
+The model above does not include rows with NAs among the selected predictors.
+This could mean that the model is selectively bias as the NAs could be huge underrepresentations. 
+
+
+
+
